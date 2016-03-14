@@ -49,6 +49,38 @@ Kernel::Kernel(const Kernel &k) {
 	curImp = k.curImp;
 }
 
+Kernel::Kernel(const Kernel &k, float scale, float variation) {
+	if (scale <= 0)
+		Kernel(k);
+	this->priority = k.priority;
+	this->widths = k.widths;
+	this->heights = k.heights;
+	this->depths = k.depths;
+	this->delays = k.delays;
+	numImp = k.numImp;
+	for (unsigned i = 0; i < numImp; ++i) {
+		this->widths[i] = k.widths[i] * scale
+				* RandU(100 * (1 - variation), 100 * (1 + variation)) / 100.0;
+		this->heights[i] = k.heights[i] * scale
+				* RandU(100 * (1 - variation), 100 * (1 + variation)) / 100.0;
+		this->depths[i] = k.depths[i] * scale
+				* RandU(100 * (1 - variation), 100 * (1 + variation)) / 100.0;
+		this->delays[i] = k.delays[i] * scale
+				* RandU(100 * (1 - variation), 100 * (1 + variation)) / 100.0;
+		if (this->widths[i] < 1)
+			this->widths[i] = 1;
+		if (this->heights[i] < 1)
+			this->heights[i] = 1;
+		if (this->depths[i] < 1)
+			this->depths[i] = 1;
+		if (this->delays[i] < 1)
+			this->delays[i] = 1;
+	}
+
+	index = -1;
+	curImp = -1;
+}
+
 bool Kernel::Equals(Kernel kernel) {
 	if (priority != kernel.priority || index != kernel.index
 			|| numImp != kernel.numImp)

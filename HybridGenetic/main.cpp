@@ -11,10 +11,14 @@
 #include <string>
 #include <algorithm>
 #include <omp.h>
+#include <random>
 
 #include "Kernel.h"
 #include "OTreeEncoding.h"
+#include "OTreeEncoding2D.h"
 #include "InsertOrder.h"
+#include "Task.h"
+#include "Scheduler.h"
 
 using namespace std;
 
@@ -22,6 +26,7 @@ class GeneticAlgorithm {
 private:
 	vector<Kernel> kernels;
 	vector<OTreeEncoding> population;
+	vector<OTreeEncoding2D> population2D;
 	vector<double> fitness;
 public:
 	GeneticAlgorithm(int numKernels, int RU_size) {
@@ -87,16 +92,29 @@ public:
 		SmoothTriangle.AddImplementation(18, 18, 5, 17, RU_size);
 		kernels.push_back(SmoothTriangle);
 
-		/*kernels.Add(new Kernel(ARF));
-		 kernels.Add(new Kernel(DIFFEQ));
-		 kernels.Add(new Kernel(EWF));
-		 kernels.Add(new Kernel(FIR1));
-		 kernels.Add(new Kernel(FIR2));
-		 kernels.Add(new Kernel(DCT));
-		 kernels.Add(new Kernel(HAL));
-		 kernels.Add(new Kernel(PAULIN));
-		 kernels.Add(new Kernel(Wavelet));
-		 kernels.Add(new Kernel(SmoothTriangle));*/
+		float scale = 1.5, variation = 0.2;
+
+		kernels.push_back(Kernel(ARF, scale, variation));
+		kernels.push_back(Kernel(DIFFEQ, scale, variation));
+		kernels.push_back(Kernel(EWF, scale, variation));
+		kernels.push_back(Kernel(FIR1, scale, variation));
+		kernels.push_back(Kernel(FIR2, scale, variation));
+		kernels.push_back(Kernel(DCT, scale, variation));
+		kernels.push_back(Kernel(HAL, scale, variation));
+		kernels.push_back(Kernel(PAULIN, scale, variation));
+		kernels.push_back(Kernel(Wavelet, scale, variation));
+		kernels.push_back(Kernel(SmoothTriangle, scale, variation));
+
+		/*kernels.push_back(Kernel(ARF, scale, variation));
+		 kernels.push_back(Kernel(DIFFEQ));
+		 kernels.push_back(Kernel(EWF));
+		 kernels.push_back(Kernel(FIR1));
+		 kernels.push_back(Kernel(FIR2));
+		 kernels.push_back(Kernel(DCT));
+		 kernels.push_back(Kernel(HAL));
+		 kernels.push_back(Kernel(PAULIN));
+		 kernels.push_back(Kernel(Wavelet));
+		 kernels.push_back(Kernel(SmoothTriangle));*/
 
 		/*Kernel random1 = new Kernel(RandU(1, 10));
 		 random1.AddImplementation(4, 4, 23, 11.06, RU_size);
@@ -114,6 +132,7 @@ public:
 		for (unsigned int i = 0; i < kernels.size(); ++i) {
 			kernels[i].SetIndex(i);
 		}
+		kernels.erase(kernels.begin() + numKernels, kernels.end());
 		OTreeEncoding::SetKernels(kernels);
 	}
 
@@ -124,8 +143,8 @@ public:
 		unsigned i, j;
 		unsigned size = kernels.size();
 		double t;
-		vector<int> order = vector<int>(size);
-		vector<int> impls = vector<int>(size);
+		vector<int> order = vector<int>();
+		vector<int> impls = vector<int>();
 
 		vector<int> x = vector<int>(size);
 		vector<int> y = vector<int>(size);
@@ -139,35 +158,38 @@ public:
 		InsertOrder child;
 		double minCost = numeric_limits<double>::max();
 
-		while (true) {
-			i++;
-			random_shuffle(order.begin(), order.end());
+		FILE *f = fopen("montecarlo.txt", "w");
+
+		do {
 			for (j = 0; j < kernels.size(); ++j) {
 				impls[j] = (RandU(0, kernels[j].GetNumImplements()));
 			}
 			child = InsertOrder(order, impls);
 			child.GetGreedyTree(x, y, type);
+			fprintf(f, "%d,%d\n", child.GetBestWidth(), child.GetBestLength());
 			if (child.GetFitness() < minCost) {
 				minCost = child.GetFitness();
 				t = (clock() - start) / (double) CLOCKS_PER_SEC;
-				printf(
-						"Better Individual Found at %d: %6.2f\t%dx%d Time: %6.2f\n",
-						i, minCost, child.GetBestWidth(), child.GetBestLength(),
-						t);
+				printf("Better Individual Found at %d: %6.2f\t%dx%d Time: %6.2f\n", i, minCost, child.GetBestWidth(),
+						child.GetBestLength(), t);
 			}
 			if (i % 100 == 0) {
 				t = (clock() - start) / (double) CLOCKS_PER_SEC;
 				printf("Individual #%d: Time: %6.2f\n", i, t);
-				if (t > 3600) {
-					return;
-				}
 			}
-		}
+			if (t > 3600) {
+				return;
+			}
+			i++;
+		} while (true);
+		//while (next_permutation(order.begin(), order.end()));
+
+		fclose(f);
 
 	}
 
-	void ProceedHybridGA(unsigned PopSize, int MaxGen, int mutImpProb,
-			int mutSeqProb, int crossProb, ObjectiveType type) {
+	void ProceedHybridGA(unsigned PopSize, int MaxGen, int mutImpProb, int mutSeqProb, int crossProb,
+			ObjectiveType type) {
 		cout << "HybridGA Initial Population Generation Begins..." << endl;
 		clock_t start = clock();
 		int i, j;
@@ -192,13 +214,16 @@ public:
 			random_shuffle(order.begin(), order.end());
 			for (j = 0; j < size; ++j) {
 				do {
-					impls[j] = (RandU(0, kernels[j].GetNumImplements()));
+					/*if (type == MaxUtility)
+					 impls[j] = RandU(0, kernels[j].GetNumImplements() + 1) - 1;
+					 else*/
+					impls[j] = RandU(0, kernels[j].GetNumImplements());
 					kernels[j].SetCurrentImplementation(impls[j]);
-				} while (kernels[j].GetDepth() > OTreeEncoding::MAX_DEPTH);
+				} while (kernels[j].GetDepth() > OTreeEncoding::MAX_PHY_DEPTH);
 			}
 			child = InsertOrder(order, impls);
-			if (find(hybridPop.begin(), hybridPop.end(), child)
-					!= hybridPop.end())
+			//child.GetGreedyTree(x, y, type);
+			if (find(hybridPop.begin(), hybridPop.end(), child) != hybridPop.end())
 				continue;
 			else {
 				child.GetGreedyTree(x, y, type);
@@ -208,8 +233,133 @@ public:
 				cout << hybridPop.size() << endl;
 		}
 		t = (clock() - start) / (double) CLOCKS_PER_SEC;
-		cout << "HybridGA Initial Population Generation Time: " << t << "s"
-				<< endl;
+		cout << "HybridGA Initial Population Generation Time: " << t << "s" << endl;
+
+		int generation = 0, p1, p2;
+
+		double cost = numeric_limits<double>::max();
+		double bestCost = numeric_limits<double>::max();
+
+		cout << "Hybrid Genetic Algorithm Starts..." << endl;
+		start = clock();
+		while (generation < MaxGen) {
+			generation++;
+			while (hybridPop.size() < 3 * PopSize) {
+				p1 = RandU(0, PopSize);
+				if (RandU(0, 100) > crossProb) {
+					child = hybridPop[p1].Mutation(mutImpProb, mutSeqProb);
+				} else {
+					p2 = RandU(0, PopSize);
+					child = hybridPop[p1].CrossOver(hybridPop[p2]);
+				}
+				if (find(hybridPop.begin(), hybridPop.end(), child) != hybridPop.end())
+					continue;
+
+				child.GetGreedyTree(x, y, type);
+				cost = child.GetFitness();
+				if (cost < numeric_limits<double>::max()) {
+					hybridPop.push_back(InsertOrder(child));
+				}
+			}
+
+			sort(hybridPop.begin(), hybridPop.end());
+			hybridPop.erase(hybridPop.begin() + PopSize, hybridPop.end());
+			t = (clock() - start) / (double) CLOCKS_PER_SEC;
+			best = 0;
+			worst = hybridPop.size() - 1;
+			OTreeEncoding encode;
+			if (hybridPop[best].GetFitness() < bestCost) {
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %8f s\n", generation,
+						hybridPop[best].GetFitness(), hybridPop[best].GetBestWidth(), hybridPop[best].GetBestLength(),
+						t);
+				bestCost = hybridPop[best].GetFitness();
+				encode = hybridPop[best].GetGreedyTree(x, y, type);
+				printf("Encoding: %s\n", encode.ToString().c_str());
+			} else if (generation % 10 == 0) {
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %8f s\n", generation,
+						hybridPop[best].GetFitness(), hybridPop[best].GetBestWidth(), hybridPop[best].GetBestLength(),
+						t);
+				printf("Generation %d\t Worst Individual: %6.2f\t%dx%d\tTime: %8f s\n", generation,
+						hybridPop[worst].GetFitness(), hybridPop[worst].GetBestWidth(),
+						hybridPop[worst].GetBestLength(), t);
+				if (hybridPop[best].GetFitness() == hybridPop[worst].GetFitness()
+						&& hybridPop[best].GetBestWidth() == hybridPop[worst].GetBestWidth()
+						&& hybridPop[best].GetBestLength() == hybridPop[worst].GetBestLength()) {
+					InsertOrder o1 = hybridPop[best];
+					InsertOrder o2 = hybridPop[worst];
+					if (o1 == o2) {
+						printf("worst equals best, something is wrong!\n");
+						exit(-1);
+					} else {
+						printf("worst is not best, something is magical!\n");
+					}
+				}
+			}
+		}
+
+		child = hybridPop[best];
+		OTreeEncoding encode = child.GetGreedyTree(x, y, type);
+		encode.Encoding2Mapping(x, y, type);
+		int implement, index;
+		FILE *file = fopen("placement.hybrid.csv", "w");
+		for (i = 0; i < size; ++i) {
+			index = child.GetOrder()[i];
+			implement = child.GetImplementation()[index];
+			kernels[index].SetCurrentImplementation(implement);
+			fprintf(file, "%d %d %d %d %d %d\n", index, x[index], y[index], kernels[index].GetWidth(),
+					kernels[index].GetHeight(), kernels[index].GetDepth());
+		}
+
+		fclose(file);
+
+	}
+
+	void ProceedHybridGAOrig(unsigned PopSize, int MaxGen, int mutImpProb, int mutSeqProb, int crossProb,
+			ObjectiveType type) {
+		cout << "HybridGA Initial Population Generation Begins..." << endl;
+		clock_t start = clock();
+		int i, j;
+		int size = kernels.size();
+		vector<int> order = vector<int>();
+		vector<int> impls = vector<int>();
+
+		for (i = 0; i < size; ++i) {
+			order.push_back(i);
+			impls.push_back(0);
+		}
+
+		vector<int> x = vector<int>(size);
+		vector<int> y = vector<int>(size);
+
+		double t;
+		int best, worst;
+		i = 0;
+		vector<InsertOrder> hybridPop = vector<InsertOrder>();
+		InsertOrder child;
+		while (hybridPop.size() < PopSize) {
+			random_shuffle(order.begin(), order.end());
+			for (j = 0; j < size; ++j) {
+				do {
+					/*if (type == MaxUtility)
+					 impls[j] = RandU(0, kernels[j].GetNumImplements() + 1)
+					 - 1;
+					 else
+					 */impls[j] = RandU(0, kernels[j].GetNumImplements());
+					kernels[j].SetCurrentImplementation(impls[j]);
+				} while (kernels[j].GetDepth() > OTreeEncoding::MAX_DEPTH);
+			}
+			child = InsertOrder(order, impls);
+			if (find(hybridPop.begin(), hybridPop.end(), child) != hybridPop.end())
+				continue;
+			else {
+				child.GetGreedyTree2D(x, y, type);
+				hybridPop.push_back(child);
+			}
+			if (hybridPop.size() % 10 == 0)
+				cout << hybridPop.size() << endl;
+		}
+		t = (clock() - start) / (double) CLOCKS_PER_SEC;
+		cout << "HybridGA Initial Population Generation Time: " << t << "s" << endl;
 
 		int generation = 0, p1, p2;
 
@@ -228,11 +378,10 @@ public:
 					p2 = RandU(0, PopSize);
 					child = hybridPop[p1].CrossOver(hybridPop[p2]);
 				}
-				if (find(hybridPop.begin(), hybridPop.end(), child)
-						!= hybridPop.end())
+				if (find(hybridPop.begin(), hybridPop.end(), child) != hybridPop.end())
 					continue;
 
-				child.GetGreedyTree(x, y, type);
+				child.GetGreedyTree2D(x, y, type);
 				cost = child.GetFitness();
 				if (cost < numeric_limits<double>::max()) {
 					hybridPop.push_back(child);
@@ -244,33 +393,24 @@ public:
 			t = (clock() - start) / (double) CLOCKS_PER_SEC;
 			best = 0;
 			worst = hybridPop.size() - 1;
-			OTreeEncoding encode;
+			OTreeEncoding2D encode;
 			if (hybridPop[best].GetFitness() < bestCost) {
-				printf(
-						"Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %8f s\n",
-						generation, hybridPop[best].GetFitness(),
-						hybridPop[best].GetBestWidth(),
-						hybridPop[best].GetBestLength(), t);
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %8f s\n", generation,
+						hybridPop[best].GetFitness(), hybridPop[best].GetBestWidth(), hybridPop[best].GetBestLength(),
+						t);
 				bestCost = hybridPop[0].GetFitness();
-				encode = hybridPop[best].GetGreedyTree(x, y, type);
+				encode = hybridPop[best].GetGreedyTree2D(x, y, type);
 				printf("Encoding: %s\n", encode.ToString().c_str());
 			} else if (generation % 10 == 0) {
-				printf(
-						"Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %8f s\n",
-						generation, hybridPop[best].GetFitness(),
-						hybridPop[best].GetBestWidth(),
-						hybridPop[best].GetBestLength(), t);
-				printf(
-						"Generation %d\t Worst Individual: %6.2f\t%dx%d\tTime: %8f s\n",
-						generation, hybridPop[worst].GetFitness(),
-						hybridPop[worst].GetBestWidth(),
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %8f s\n", generation,
+						hybridPop[best].GetFitness(), hybridPop[best].GetBestWidth(), hybridPop[best].GetBestLength(),
+						t);
+				printf("Generation %d\t Worst Individual: %6.2f\t%dx%d\tTime: %8f s\n", generation,
+						hybridPop[worst].GetFitness(), hybridPop[worst].GetBestWidth(),
 						hybridPop[worst].GetBestLength(), t);
-				if (hybridPop[best].GetFitness()
-						== hybridPop[worst].GetFitness()
-						&& hybridPop[best].GetBestWidth()
-								== hybridPop[worst].GetBestWidth()
-						&& hybridPop[best].GetBestLength()
-								== hybridPop[worst].GetBestLength()) {
+				if (hybridPop[best].GetFitness() == hybridPop[worst].GetFitness()
+						&& hybridPop[best].GetBestWidth() == hybridPop[worst].GetBestWidth()
+						&& hybridPop[best].GetBestLength() == hybridPop[worst].GetBestLength()) {
 					InsertOrder o1 = hybridPop[best];
 					InsertOrder o2 = hybridPop[worst];
 					if (o1 == o2) {
@@ -281,7 +421,7 @@ public:
 		}
 
 		child = hybridPop[best];
-		OTreeEncoding encode = child.GetGreedyTree(x, y, type);
+		OTreeEncoding2D encode = child.GetGreedyTree2D(x, y, type);
 		encode.Encoding2Mapping(x, y, type);
 		int implement, index;
 		FILE *file = fopen("placement.hybrid.csv", "w");
@@ -289,19 +429,15 @@ public:
 			index = child.GetOrder()[i];
 			implement = child.GetImplementation()[index];
 			kernels[index].SetCurrentImplementation(implement);
-			fprintf(file, "%d %d %d %d %d %d\n", index, x[index], y[index],
-					kernels[index].GetWidth(), kernels[index].GetHeight(),
-					kernels[index].GetDepth());
+			fprintf(file, "%d %d %d %d %d %d\n", index, x[index], y[index], kernels[index].GetWidth(),
+					kernels[index].GetHeight(), kernels[index].GetDepth());
 		}
 
 		fclose(file);
 
-
-
 	}
 
-	void ProceedGA(unsigned PopSize, int MaxGen, int mutImpProb, int mutSeqProb,
-			int crossProb, ObjectiveType type) {
+	void ProceedGA(unsigned PopSize, int MaxGen, int mutImpProb, int mutSeqProb, int crossProb, ObjectiveType type) {
 		printf("GA Initial Population Generation Begins...\n");
 
 		clock_t start = clock();
@@ -344,14 +480,13 @@ public:
 					child = population[p1].GetMutation(mutImpProb, mutSeqProb);
 				}
 
-				if (find(population.begin(), population.end(), child)
-						!= population.end())
+				cost = child.Encoding2Mapping(x, y, type);
+				if (find(population.begin(), population.end(), child) != population.end())
 					continue;
 
-				cost = child.Encoding2Mapping(x, y, type);
 				if (cost < numeric_limits<double>::max()) {
 					child.SetFitness(cost);
-					population.push_back(child);
+					population.push_back(OTreeEncoding(child));
 				}
 
 			}
@@ -362,25 +497,96 @@ public:
 			int best = 0;
 			t = (clock() - start) / (double) CLOCKS_PER_SEC;
 			if (population[best].GetFitness() < bestCost) {
-				printf(
-						"Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %6.2f s\n",
-						generation, population[best].GetFitness(),
-						population[best].GetWidth(),
-						population[best].GetLength(), t);
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %6.2f s\n", generation,
+						population[best].GetFitness(), population[best].GetWidth(), population[best].GetLength(), t);
 				bestCost = population[0].GetFitness();
 			} else if (generation % 10 == 0) {
-				printf(
-						"Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %6.2f s\n",
-						generation, population[best].GetFitness(),
-						population[best].GetWidth(),
-						population[best].GetLength(), t);
-				printf(
-						"Generation %d\t Worst Individual: %6.2f\t%dx%d\tTime: %6.2f s\n",
-						generation, population[worst].GetFitness(),
-						population[worst].GetWidth(),
-						population[worst].GetLength(), t);
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %6.2f s\n", generation,
+						population[best].GetFitness(), population[best].GetWidth(), population[best].GetLength(), t);
+				printf("Generation %d\t Worst Individual: %6.2f\t%dx%d\tTime: %6.2f s\n", generation,
+						population[worst].GetFitness(), population[worst].GetWidth(), population[worst].GetLength(), t);
+//				printf("%d\n", population[best] == population[worst]);
 			}
 			random_shuffle(population.begin(), population.end());
+		}
+
+	}
+
+	void ProceedGAOrig(unsigned PopSize, int MaxGen, int mutImpProb, int mutSeqProb, int crossProb,
+			ObjectiveType type) {
+		printf("GAOrig Initial Population Generation Begins...\n");
+
+		clock_t start = clock();
+		this->GenerateInitialPopulation2D(PopSize, type);
+		double t = (clock() - start) / (double) CLOCKS_PER_SEC;
+		printf("Initial Population Generation Time: %8fs", t);
+
+		int generation = 0, p1, p2;
+
+		double cost = numeric_limits<double>::max();
+		double bestCost = numeric_limits<double>::max();
+		int i;
+		OTreeEncoding2D child;
+		int size = kernels.size();
+		InsertOrder o;
+
+		vector<int> order = vector<int>();
+		vector<int> impls = vector<int>();
+
+		for (i = 0; i < size; ++i) {
+			order.push_back(i);
+			impls.push_back(0);
+		}
+
+		vector<int> x = vector<int>(size);
+		vector<int> y = vector<int>(size);
+
+		printf("General Genetic Algorithm Starts...\n");
+		start = clock();
+
+		while (generation < MaxGen) {
+			generation++;
+
+			while (population2D.size() < PopSize * 2) {
+				p1 = RandU(0, PopSize);
+				if (RandU(0, 100) < crossProb) {
+					p2 = RandU(0, PopSize);
+					child = this->CrossOver2D(population2D[p1], population2D[p2]);
+				} else {
+					child = population2D[p1].GetMutation(mutImpProb, mutSeqProb);
+				}
+
+				cost = child.Encoding2Mapping(x, y, type);
+				if (find(population2D.begin(), population2D.end(), child) != population2D.end())
+					continue;
+
+				if (cost < numeric_limits<double>::max()) {
+					child.SetFitness(cost);
+					population2D.push_back(OTreeEncoding2D(child));
+				}
+
+			}
+
+			sort(population2D.begin(), population2D.end());
+			population2D.erase(population2D.begin() + PopSize, population2D.end());
+			int worst = population2D.size() - 1;
+			int best = 0;
+			t = (clock() - start) / (double) CLOCKS_PER_SEC;
+			if (population2D[best].GetFitness() < bestCost) {
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %6.2f s\n", generation,
+						population2D[best].GetFitness(), population2D[best].GetWidth(), population2D[best].GetLength(),
+						t);
+				bestCost = population2D[0].GetFitness();
+			} else if (generation % 10 == 0) {
+				printf("Generation %d\t Best Individual:  %6.2f\t%dx%d\tTime: %6.2f s\n", generation,
+						population2D[best].GetFitness(), population2D[best].GetWidth(), population2D[best].GetLength(),
+						t);
+				printf("Generation %d\t Worst Individual: %6.2f\t%dx%d\tTime: %6.2f s\n", generation,
+						population2D[worst].GetFitness(), population2D[worst].GetWidth(),
+						population2D[worst].GetLength(), t);
+//				printf("%d", population2D[best] == population2D[worst]);
+			}
+			random_shuffle(population2D.begin(), population2D.end());
 		}
 
 	}
@@ -416,13 +622,55 @@ public:
 		vector<bool> tra_p1, tra_p2;
 
 		p1.GetPartialTree(part1, &seq_p1, &tra_p1);
-
 		p2.GetPartialTree(part2, &seq_p2, &tra_p2);
 
 		seq_p1.insert(seq_p1.end(), seq_p2.begin(), seq_p2.end());
 		tra_p1.insert(tra_p1.end(), tra_p2.begin(), tra_p2.end());
 
 		OTreeEncoding child = OTreeEncoding(tra_p1, seq_p1, imp);
+
+		return child;
+	}
+
+	OTreeEncoding2D CrossOver2D(OTreeEncoding2D p1, OTreeEncoding2D p2) {
+		vector<int> part1 = vector<int>();
+		vector<int> part2 = vector<int>();
+
+		int size = kernels.size();
+
+		int seperate = size / 2;
+
+		vector<int> imp = vector<int>();
+		for (int i = 0; i < size; ++i) {
+			imp.push_back(-1);
+		}
+
+		for (int i = 0; i < size; ++i) {
+			if (RandU(0, size) > seperate) {
+				part1.push_back(i);
+				imp[i] = p1.GetImplementAt(i);
+			} else {
+				part2.push_back(i);
+				imp[i] = p2.GetImplementAt(i);
+			}
+		}
+
+		vector<int> seq_p1H, seq_p2H;
+		vector<int> seq_p1V, seq_p2V;
+		vector<bool> tra_p1H, tra_p2H;
+		vector<bool> tra_p1V, tra_p2V;
+
+		p1.GetPartialTree(part1, &seq_p1H, &tra_p1H, H);
+		p2.GetPartialTree(part2, &seq_p2H, &tra_p2H, H);
+		p1.GetPartialTree(part1, &seq_p1V, &tra_p1V, V);
+		p2.GetPartialTree(part2, &seq_p2V, &tra_p2V, V);
+
+		seq_p1H.insert(seq_p1H.end(), seq_p2H.begin(), seq_p2H.end());
+		seq_p1V.insert(seq_p1V.end(), seq_p2V.begin(), seq_p2V.end());
+		tra_p1H.insert(tra_p1H.end(), tra_p2H.begin(), tra_p2H.end());
+		tra_p1V.insert(tra_p1V.end(), tra_p2V.begin(), tra_p2V.end());
+
+		OTreeEncoding2D child = OTreeEncoding2D(tra_p1H, tra_p1V, seq_p1H, seq_p1V, imp);
 
 		return child;
 	}
@@ -452,15 +700,18 @@ public:
 
 		OTreeEncoding child;
 
+		int validation = 0;
+
 		while (population.size() < popsize) {
 			random_shuffle(seq.begin(), seq.end());
-			random_shuffle(traversal.begin(), traversal.end());
+			do {
+				random_shuffle(traversal.begin() + validation, traversal.end());
+			} while ((validation = validTraversal(traversal)) != traversal.size());
 			for (j = 0; j < size; ++j) {
 				impls[j] = (RandU(0, kernels[j].GetNumImplements()));
 			}
 			child = OTreeEncoding(traversal, seq, impls);
-			if (find(population.begin(), population.end(), child)
-					!= population.end())
+			if (find(population.begin(), population.end(), child) != population.end())
 				continue;
 			else {
 				fit = child.Encoding2Mapping(x, y, type);
@@ -471,24 +722,132 @@ public:
 
 	}
 
+	void GenerateInitialPopulation2D(unsigned popsize, ObjectiveType type) {
+		int i, j;
+		vector<Kernel> leftKernels = vector<Kernel>(kernels);
+		double fit;
+
+		int size = kernels.size();
+		vector<int> seqH = vector<int>();
+		vector<int> seqV = vector<int>();
+		vector<int> impls = vector<int>();
+		vector<bool> traversalH = vector<bool>();
+		vector<bool> traversalV = vector<bool>();
+
+		for (i = 0; i < size; ++i) {
+			seqH.push_back(i);
+			seqV.push_back(i);
+			impls.push_back(0);
+			traversalH.push_back(true);
+			traversalV.push_back(true);
+		}
+
+		for (i = 0; i < size; ++i) {
+			traversalH.push_back(false);
+			traversalV.push_back(false);
+		}
+
+		vector<int> x = vector<int>(size);
+		vector<int> y = vector<int>(size);
+
+		OTreeEncoding2D child;
+
+		int validation = 0;
+
+		while (population2D.size() < popsize) {
+			random_shuffle(seqH.begin(), seqH.end());
+			random_shuffle(seqV.begin(), seqV.end());
+			do {
+				random_shuffle(traversalH.begin() + validation, traversalH.end());
+			} while ((validation = validTraversal(traversalH)) != traversalH.size());
+			validation = 0;
+			do {
+				random_shuffle(traversalV.begin() + validation, traversalV.end());
+			} while ((validation = validTraversal(traversalV)) != traversalV.size());
+			for (j = 0; j < size; ++j) {
+				impls[j] = (RandU(0, kernels[j].GetNumImplements()));
+			}
+			child = OTreeEncoding2D(traversalH, traversalV, seqH, seqV, impls);
+			if (find(population2D.begin(), population2D.end(), child) != population2D.end())
+				continue;
+			else {
+				fit = child.Encoding2Mapping(x, y, type);
+				child.SetFitness(fit);
+				population2D.push_back(child);
+			}
+		}
+
+	}
+
+	int validTraversal(vector<bool> traversal) {
+		int valid = 0, i;
+		for (i = 0; i < traversal.size(); ++i) {
+			if (traversal[i])
+				valid--;
+			else
+				valid++;
+			if (valid < 0)
+				return i;
+		}
+		return traversal.size();
+	}
+
 };
 
 int main(int argc, char** argv) {
 	int numKernels = 10;
-	int PopSize = 10 * numKernels;
-	int MaxGen = 200;
+	int PopSize = 5 * numKernels;
+	int MaxGen = 500;
 	int mutImpProb = 90;
 	int mutSeqProb = 90;
 	int crossProb = 10;
 
+	OTreeEncoding::MAX_DEPTH = 32;
+	OTreeEncoding::MAX_PHY_DEPTH = 32;
+	OTreeEncoding::MAX_WIDTH = 20;
+	OTreeEncoding::MAX_HEIGHT = 20;
+	int numTasks = 1000;
+	float arrivalRate = 0.5;
+
 	srand(time(NULL));
 
+	std::cerr << std::fixed;
+	std::cerr.precision(5);
+
+	ObjectiveType type = MinArea;
+
 	GeneticAlgorithm ga = GeneticAlgorithm(numKernels, 1);
-	//ga.GenerateInitialPopulation(1, ObjectiveType.MinArea);
-	ga.ProceedHybridGA(PopSize, MaxGen, mutImpProb, mutSeqProb, crossProb,
-			MinArea);
-	//ga.ProceedRandomGreedy(MinArea);
-	//ga.ProceedGA(PopSize, MaxGen, mutImpProb, mutSeqProb, crossProb, MinArea);
+	//ga.ProceedHybridGA(PopSize, MaxGen, mutImpProb, mutSeqProb, crossProb, type);
+	ga.ProceedHybridGAOrig(PopSize, MaxGen, mutImpProb, mutSeqProb, crossProb, type);
+	//ga.ProceedRandomGreedy(type);
+	//ga.ProceedGAOrig(PopSize, MaxGen, mutImpProb, mutSeqProb, crossProb, type);
+	//ga.ProceedGA(PopSize, MaxGen, mutImpProb, mutSeqProb, crossProb, type);
+	/*Scheduler s = Scheduler(numKernels, numTasks);
+
+	 s.TaskGenerator(OTreeEncoding::MAX_DEPTH, arrivalRate);
+	 s.Schedule(EDF, IMMEDIATE, 0, 0);
+	 s.Schedule(EDF, IMMEDIATE, 1, 0);
+	 s.Schedule(EDF, SLACK, 0, 0);
+	 s.Schedule(EDF, SLACK, 1, 0);
+	 s.TaskGenerator(OTreeEncoding::MAX_DEPTH, arrivalRate);
+	 s.Schedule(PATS, IMMEDIATE, 0, 0);
+	 s.Schedule(PATS, IMMEDIATE, 1, 0);
+	 s.Schedule(PATS, SLACK, 0, 0);
+	 s.Schedule(PATS, SLACK, 1, 0);*/
+	/*for (int i = 0; i < 11; ++i) {
+	 s.TaskGenerator(OTreeEncoding::MAX_DEPTH, 0.75 + 0.05 * i, arrivalRate);
+	 s.Schedule(PATS, 0);
+	 }*/
+	/*s.TaskGenerator(OTreeEncoding::MAX_DEPTH, 1.2, arrivalRate);
+	 s.Schedule(EDF, 0);
+	 s.TaskGenerator(OTreeEncoding::MAX_DEPTH, 0.9, arrivalRate);
+	 s.Schedule(EDF, 0);*/
+
+	/*arr_list[0] = Task(0, 0, 0, 18);
+	 arr_list[1] = Task(1, 2, 0, 14);
+	 arr_list[2] = Task(2, 6, 3, 29);
+	 arr_list[3] = Task(3, 8, 4, 30);
+	 arr_list[4] = Task(4, 7, 9, 25);*/
 
 	return 0;
 }

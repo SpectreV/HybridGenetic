@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "InsertOrder.h"
+#include "OTreeEncoding.h"
+#include "OTreeEncoding2D.h"
 
 using namespace std;
 
@@ -89,12 +91,9 @@ InsertOrder InsertOrder::Mutation(int mutImpProb, int mutSeqProb) {
 	for (unsigned i = 0; i < order.size(); ++i) {
 		if (RandU(0, 100) < mutImpProb)
 			do {
-				mutation.impls[i] = (RandU(0,
-						OTreeEncoding::kernels[i].GetNumImplements()));
-				OTreeEncoding::kernels[i].SetCurrentImplementation(
-						mutation.impls[i]);
-			} while (OTreeEncoding::kernels[i].GetDepth()
-					> OTreeEncoding::MAX_DEPTH);
+				mutation.impls[i] = (RandU(0, OTreeEncoding::kernels[i].GetNumImplements()));
+				OTreeEncoding::kernels[i].SetCurrentImplementation(mutation.impls[i]);
+			} while (OTreeEncoding::kernels[i].GetDepth() > OTreeEncoding::MAX_DEPTH);
 
 	}
 
@@ -104,10 +103,8 @@ InsertOrder InsertOrder::Mutation(int mutImpProb, int mutSeqProb) {
 		length = RandU(0, order.size() - start);
 		newStart = RandU(0, order.size() - length);
 
-		mutation.order.erase(mutation.order.begin() + start,
-				mutation.order.begin() + start + length);
-		mutation.order.insert(mutation.order.begin() + newStart,
-				order.begin() + start, order.begin() + start + length);
+		mutation.order.erase(mutation.order.begin() + start, mutation.order.begin() + start + length);
+		mutation.order.insert(mutation.order.begin() + newStart, order.begin() + start, order.begin() + start + length);
 	}
 
 	return mutation;
@@ -131,8 +128,7 @@ InsertOrder InsertOrder::CrossOver(InsertOrder p2) {
 	}
 
 	for (i = 0; i < order_p1.size(); ++i) {
-		if (find(indecies.begin(), indecies.end(), order_p1[i])
-				== indecies.end()) {
+		if (find(indecies.begin(), indecies.end(), order_p1[i]) == indecies.end()) {
 			order_p1.erase(order_p1.begin() + i);
 			i--;
 		}
@@ -154,8 +150,7 @@ InsertOrder InsertOrder::CrossOver(InsertOrder p2) {
 		exit(-1);
 }
 
-OTreeEncoding InsertOrder::GetGreedyTree(vector<int> &x, vector<int> &y,
-		ObjectiveType type) {
+OTreeEncoding InsertOrder::GetGreedyTree(vector<int> &x, vector<int> &y, ObjectiveType type) {
 
 	int i;
 	int location;
@@ -172,15 +167,17 @@ OTreeEncoding InsertOrder::GetGreedyTree(vector<int> &x, vector<int> &y,
 	}
 
 	int bestLoc = -1;
-	int seq, bestSeq;
-	for (i = 0; i < order.size(); ++i) {
-		seq = 0;
+	int seq, bestSeq, bestImp;
 
-		greed.SetImplementAt(order[i], impls[order[i]]);
+	for (i = 0; i < order.size(); ++i) {
 
 		bestLoc = -1;
 		bestSeq = -1;
 		minCost = std::numeric_limits<double>::max();
+
+		greed.SetImplementAt(order[i], impls[i]);
+
+		seq = 0;
 
 		for (location = 0; location <= greed.GetTraversalCount(); ++location) {
 			greed.InsertSequence(seq, order[i]);
@@ -198,8 +195,7 @@ OTreeEncoding InsertOrder::GetGreedyTree(vector<int> &x, vector<int> &y,
 			greed.RemoveTraversalAt(location);
 			greed.RemoveSequenceAt(seq);
 
-			if (location < greed.GetTraversalCount()
-					&& !greed.GetTraversalAt(location))
+			if (location < greed.GetTraversalCount() && !greed.GetTraversalAt(location))
 				seq++;
 
 		}
@@ -207,6 +203,87 @@ OTreeEncoding InsertOrder::GetGreedyTree(vector<int> &x, vector<int> &y,
 		greed.InsertTraversal(bestLoc, true);
 		greed.InsertTraversal(bestLoc, false);
 		greed.InsertSequence(bestSeq, order[i]);
+	}
+	fitness = greed.Encoding2Mapping(x, y, type);
+	width = greed.GetWidth();
+	length = greed.GetLength();
+	return greed;
+}
+
+OTreeEncoding2D InsertOrder::GetGreedyTree2D(vector<int> &x, vector<int> &y, ObjectiveType type) {
+
+	int i;
+	int locationH, locationV;
+	double cost, minCost;
+	OTreeEncoding2D greed;
+
+	//depth = new int[1, 1];
+	/*int[] x, y;
+	 x = new int[order.size()];
+	 y = new int[order.size()];*/
+
+	for (i = 0; i < order.size(); ++i) {
+		greed.AddImplement(-1);
+	}
+
+	int bestLocH, bestLocV;
+	int seqH, seqV, bestSeqH, bestSeqV, bestImp;
+
+	for (i = 0; i < order.size(); ++i) {
+
+		bestLocH = bestLocV = -1;
+		bestSeqH = bestSeqV = -1;
+		minCost = std::numeric_limits<double>::max();
+
+		greed.SetImplementAt(order[i], impls[i]);
+
+		seqH = 0;
+
+		for (locationH = 0; locationH <= greed.GetTraversalCount(H); ++locationH) {
+			greed.InsertSequence(seqH, order[i], H);
+			greed.InsertTraversal(locationH, true, H);
+			greed.InsertTraversal(locationH, false, H);
+
+			seqV = 0;
+
+			for (locationV = 0; locationV <= greed.GetTraversalCount(V); ++locationV) {
+				greed.InsertSequence(seqV, order[i], V);
+				greed.InsertTraversal(locationV, true, V);
+				greed.InsertTraversal(locationV, false, V);
+
+				cost = greed.Encoding2Mapping(x, y, type);
+				if (cost < minCost) {
+					minCost = cost;
+					bestLocH = locationH;
+					bestLocV = locationV;
+					bestSeqH = seqH;
+					bestSeqV = seqV;
+				}
+
+				greed.RemoveTraversalAt(locationV, V);
+				greed.RemoveTraversalAt(locationV, V);
+				greed.RemoveSequenceAt(seqV, V);
+
+				if (locationV < greed.GetTraversalCount(V) && !greed.GetTraversalAt(locationV, V))
+					seqV++;
+
+			}
+
+			greed.RemoveTraversalAt(locationH, H);
+			greed.RemoveTraversalAt(locationH, H);
+			greed.RemoveSequenceAt(seqH, H);
+
+			if (locationH < greed.GetTraversalCount(H) && !greed.GetTraversalAt(locationH, H))
+				seqH++;
+
+		}
+
+		greed.InsertTraversal(bestLocH, true, H);
+		greed.InsertTraversal(bestLocH, false, H);
+		greed.InsertTraversal(bestLocV, true, V);
+		greed.InsertTraversal(bestLocV, false, V);
+		greed.InsertSequence(bestSeqH, order[i], H);
+		greed.InsertSequence(bestSeqV, order[i], V);
 	}
 	fitness = greed.Encoding2Mapping(x, y, type);
 	width = greed.GetWidth();

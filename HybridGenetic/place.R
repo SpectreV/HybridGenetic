@@ -1,6 +1,6 @@
 library(plot3D)
 
-placement <- read.csv(file="placement.hybrid.csv", head=FALSE,sep=" ")
+placement <- read.csv(file="replacement.EDF.csv", head=FALSE,sep=" ")
 index = placement[,1]
 x = placement[,2]
 y = placement[,3]

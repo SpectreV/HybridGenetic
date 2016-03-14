@@ -18,6 +18,10 @@
 using namespace std;
 
 vector<Kernel> OTreeEncoding::kernels = vector<Kernel>();
+int OTreeEncoding::MAX_DEPTH = 32;
+int OTreeEncoding::MAX_PHY_DEPTH = 32;
+int OTreeEncoding::MAX_HEIGHT = 32;
+int OTreeEncoding::MAX_WIDTH = 32;
 
 OTreeEncoding::OTreeEncoding() {
 	traversal = vector<bool>();
@@ -39,8 +43,7 @@ OTreeEncoding::OTreeEncoding(const OTreeEncoding &code) {
 	this->length = code.length;
 }
 
-OTreeEncoding::OTreeEncoding(vector<bool> tra, vector<int> seq,
-		vector<int> imp) {
+OTreeEncoding::OTreeEncoding(vector<bool> tra, vector<int> seq, vector<int> imp) {
 	traversal = tra;
 	sequence = seq;
 	implements = imp;
@@ -105,36 +108,33 @@ OTreeEncoding OTreeEncoding::GetMutation(int mutImpProb, int mutSeqProb) {
 	OTreeEncoding mutation = *this;
 
 	int i = RandU(0, kernels.size());
+	int start, length, newStart;
 
 	if (RandU(0, 100) < mutImpProb)
 		mutation.implements[i] = RandU(0, kernels[i].GetNumImplements());
 
-	int start, length, newStart;
-	if (RandU(0, 100) < mutSeqProb) {
+	else {
 		start = RandU(0, sequence.size());
 		length = RandU(0, sequence.size() - start);
 		newStart = RandU(0, sequence.size() - length);
 
-		mutation.sequence.erase(mutation.sequence.begin() + start,
-				mutation.sequence.begin() + start + length);
-		mutation.sequence.insert(mutation.sequence.begin() + newStart,
-				sequence.begin() + start, sequence.begin() + start + length);
+		mutation.sequence.erase(mutation.sequence.begin() + start, mutation.sequence.begin() + start + length);
+		mutation.sequence.insert(mutation.sequence.begin() + newStart, sequence.begin() + start,
+				sequence.begin() + start + length);
 	}
 
 	return mutation;
 }
 
-void OTreeEncoding::GetPartialTree(vector<int> indecies, vector<int> *sequence,
-		vector<bool> *traversal) {
+void OTreeEncoding::GetPartialTree(vector<int> indecies, vector<int> *sequence, vector<bool> *traversal) {
 	*sequence = this->sequence;
 	*traversal = this->traversal;
 
-	int i, k, j;
-	int zeros, ones;
+	unsigned i, k, j;
+	unsigned zeros, ones;
 
 	for (i = 0; i < sequence->size(); ++i) {
-		if (find(indecies.begin(), indecies.end(), sequence->at(i))
-				!= indecies.end()) {
+		if (find(indecies.begin(), indecies.end(), sequence->at(i)) != indecies.end()) {
 			continue;
 		}
 
@@ -170,9 +170,8 @@ void OTreeEncoding::GetPartialTree(vector<int> indecies, vector<int> *sequence,
 }
 
 double OTreeEncoding::Encoding2Mapping(vector<int> &x, vector<int> &y, ObjectiveType type) {
-	int size = kernels.size();
-	int i, j, k, parentIdx, admissableMinX, admissableMinY, admissableMaxX,
-			admissableMaxY;
+	unsigned size = kernels.size();
+	int i, j, parentIdx, admissableMinX, admissableMinY, admissableMaxX, admissableMaxY;
 	bool code;
 	int maxW = 0;
 	int maxH = 0;
@@ -202,6 +201,8 @@ double OTreeEncoding::Encoding2Mapping(vector<int> &x, vector<int> &y, Objective
 
 	for (i = 0; i < implements.size(); ++i) {
 		kernels[i].SetCurrentImplementation(implements[i]);
+		if (kernels[i].GetDepth() > MAX_PHY_DEPTH)
+			return numeric_limits<double>::max();
 	}
 
 	for (i = 0; i < traversal.size(); ++i) {
@@ -220,10 +221,9 @@ double OTreeEncoding::Encoding2Mapping(vector<int> &x, vector<int> &y, Objective
 			admissableMinY = admissableMaxY = 0;
 			admissableMinX = x[actualIdx];
 			admissableMaxX = std::min(x[actualIdx] + w, currentWidth);
-			while (admissableMaxY - admissableMinY < h
-					&& admissableMaxY < currentLength) {
+			while (admissableMaxY - admissableMinY < h && admissableMaxY < currentLength) {
 				for (j = admissableMinX; j < admissableMaxX; ++j) {
-					if (d + depth[admissableMaxY][j] > MAX_DEPTH) {
+					if (d + depth[admissableMaxY][j] > MAX_PHY_DEPTH) {
 						admissableMinY = admissableMaxY + 1;
 						break;
 					}
@@ -278,36 +278,39 @@ double OTreeEncoding::Encoding2Mapping(vector<int> &x, vector<int> &y, Objective
 	length = maxH;
 
 	int conflict;
-	double maxDelay;
+	double utility = 0;
 
 	switch (type) {
+
 	case MinConflict:
 		conflict = 0;
 		for (i = 0; i < size; ++i) {
 			for (j = i + 1; j < size; ++j) {
 				if (((x[i] + kernels[i].GetWidth() > x[j] && x[j] >= x[i])
 						|| (x[j] + kernels[j].GetWidth() > x[i] && x[i] >= x[j]))
-						&& ((y[i] + kernels[i].GetHeight() > y[j]
-								&& y[j] >= y[i])
-								|| (y[j] + kernels[j].GetHeight() > y[i]
-										&& y[i] >= y[j])))
+						&& ((y[i] + kernels[i].GetHeight() > y[j] && y[j] >= y[i])
+								|| (y[j] + kernels[j].GetHeight() > y[i] && y[i] >= y[j])))
 						//Overlapping Condition
 						{
-					conflict += kernels[i].GetPriority()
-							+ kernels[j].GetPriority();
+					conflict += 1;
 				}
 			}
 		}
-		return conflict * width * length;
-	case MinADProduct:
-		maxDelay = std::numeric_limits<double>::min();
-		for (i = 0; i < size; ++i) {
-			if (kernels[i].GetDelay() > maxDelay)
-				maxDelay = kernels[i].GetDelay();
+		return conflict + sqrt(width * length) + (width + length) / 2.0;
+	case MaxUtility:
+		if (maxW > MAX_WIDTH || maxH > MAX_HEIGHT)
+			return sqrt(width * length) + (width + length) / 2.0;
+		else {
+			for (i = 0; i < maxH; ++i) {
+				for (j = 0; j < maxW; ++j) {
+					utility += depth[i][j] <= MAX_PHY_DEPTH ? depth[i][j] : MAX_PHY_DEPTH;
+				}
+			}
+			return 1 - utility / MAX_WIDTH / MAX_HEIGHT / MAX_PHY_DEPTH;
 		}
-		return width * length * maxDelay;
 	default:
 		return sqrt(width * length) + (width + length) / 2.0;
+		//return width * length;
 	}
 }
 
@@ -323,7 +326,7 @@ string OTreeEncoding::ToString() {
 
 	string s = "T:\n[";
 	char buf[21];
-	int i = 0;
+	unsigned i = 0;
 	for (i = 0; i < traversal.size(); ++i) {
 
 		if (traversal[i])
@@ -354,7 +357,11 @@ bool OTreeEncoding::operator ==(const OTreeEncoding &encode) {
 		return false;
 	if (encode.implements.size() != implements.size())
 		return false;
-	int i;
+
+	if (width == encode.width && length == encode.length)
+		return true;
+
+	unsigned i;
 	for (i = 0; i < encode.sequence.size(); ++i) {
 		if (encode.sequence[i] != sequence[i])
 			return false;

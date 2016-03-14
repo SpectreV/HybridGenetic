@@ -19,24 +19,25 @@
 using namespace std;
 
 enum ObjectiveType {
-	MinArea, MinADProduct, MinConflict
+	MinArea, MaxUtility, MinConflict
 };
-
 
 class OTreeEncoding {
 
 private:
 	vector<bool> traversal;
 	vector<int> sequence;
+
+protected:
 	vector<int> implements;
 	int width;
 	int length;
-	vector< vector<int> > depth;
+	vector<vector<int> > depth;
 	int x[], y[];
 	double fitness;
 
 public:
-	static const int MAX_DEPTH = 16;
+	static int MAX_DEPTH, MAX_WIDTH, MAX_HEIGHT, MAX_PHY_DEPTH;
 	static vector<Kernel> kernels;
 
 	OTreeEncoding();
@@ -73,12 +74,11 @@ public:
 
 	OTreeEncoding GetMutation(int mutImpProb, int mutSeqProb);
 
-	void GetPartialTree(vector<int> indecies, vector<int> *sequence,
-			vector<bool> *traversal);
+	void GetPartialTree(vector<int> indecies, vector<int> *sequence, vector<bool> *traversal);
 
 	double Encoding2Mapping(vector<int> &x, vector<int> &y, ObjectiveType type = MinArea);
 
-	bool operator < (const OTreeEncoding& encode) {
+	bool operator <(const OTreeEncoding& encode) {
 		return this->fitness < encode.fitness;
 	}
 

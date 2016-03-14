@@ -11,6 +11,7 @@
 #include <cstdlib>
 
 #include "OTreeEncoding.h"
+#include "OTreeEncoding2D.h"
 
 class InsertOrder {
 
@@ -50,6 +51,7 @@ public:
 
 	OTreeEncoding GetGreedyTree(vector<int> &x, vector<int> &y, ObjectiveType type);
 
+	OTreeEncoding2D GetGreedyTree2D(vector<int> &x, vector<int> &y, ObjectiveType type);
 };
 
 #endif /* INSERTORDER_H_ */

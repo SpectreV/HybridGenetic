@@ -30,6 +30,8 @@ public:
 
 	Kernel(const Kernel&);
 
+	Kernel(const Kernel &k, float scale, float variation);
+
 	bool Equals(Kernel kernel);
 
 	void AddImplementation(int w, int h, int d, double delay, int RU_size);
@@ -76,6 +78,34 @@ public:
 			return 0;
 		else
 			return delays[curImp];
+	}
+
+	inline int GetWidth(int imp) {
+		if (imp < 0 || imp >= numImp)
+			return 0;
+		else
+			return widths[imp];
+	}
+
+	inline int GetHeight(int imp) {
+		if (imp < 0 || imp >= numImp)
+			return 0;
+		else
+			return heights[imp];
+	}
+
+	inline int GetDepth(int imp) {
+		if (imp < 0 || imp >= numImp)
+			return 0;
+		else
+			return depths[imp];
+	}
+
+	inline double GetDelay(int imp) {
+		if (imp < 0 || imp >= numImp)
+			return 0;
+		else
+			return delays[imp];
 	}
 
 	inline int GetNumImplements() {
