@@ -309,8 +309,8 @@ double OTreeEncoding::Encoding2Mapping(vector<int> &x, vector<int> &y, Objective
 			return 1 - utility / MAX_WIDTH / MAX_HEIGHT / MAX_PHY_DEPTH;
 		}
 	default:
-		return sqrt(width * length) + (width + length) / 2.0;
-		//return width * length;
+		//return sqrt(width * length) + (width + length) / 2.0;
+		return width * length;
 	}
 }
 
